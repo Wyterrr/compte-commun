@@ -115,7 +115,7 @@ printf 'Host github.com\n  IdentityFile ~/.ssh/github_compte_commun\n  Identitie
 ```
 
 ```bash
-git clone git@github.com:TON_PSEUDO/compte-commun.git ~/compte-commun && cd ~/compte-commun
+git clone git@github.com:Wyterrr/compte-commun.git ~/compte-commun && cd ~/compte-commun
 ```
 
 À la question `Are you sure you want to continue connecting`, réponds `yes`.
