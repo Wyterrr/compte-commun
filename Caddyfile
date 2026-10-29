@@ -1,0 +1,5 @@
+# Le domaine vient de la variable DOMAIN du fichier .env
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:3000
+}

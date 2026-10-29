@@ -1,0 +1,37 @@
+services:
+  app:
+    build: .
+    container_name: compte-commun
+    restart: unless-stopped
+    environment:
+      TZ: Europe/Paris
+      # Adresse de contact pour les notifications push (obligatoire pour iPhone)
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:toi@example.com}
+    volumes:
+      - cc-data:/data
+    # Accessible seulement depuis le VPS lui-même (utile si un nginx existant sert de proxy).
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  # HTTPS automatique (certificat Let's Encrypt) devant l'app
+  caddy:
+    image: caddy:2
+    container_name: compte-commun-caddy
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  cc-data:
+  caddy-data:
+  caddy-config:
