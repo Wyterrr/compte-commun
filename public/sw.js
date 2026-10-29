@@ -1,5 +1,5 @@
 // Changer la version force la mise à jour du cache de l'app chez tout le monde.
-const VERSION = 'v11';
+const VERSION = 'v12';
 const SHELL_CACHE = `cc-shell-${VERSION}`;
 const API_CACHE = 'cc-api';
 

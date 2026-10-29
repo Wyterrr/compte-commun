@@ -153,7 +153,15 @@ export function syncChargeDeleted(chargeId) {
  * Reçue sur le compte commun, elle réduit simplement ce qu'il faut y verser ; reçue sur le compte
  * de quelqu'un, cette personne la reverse via sa part (sa part augmente du montant reçu).
  */
+// Une aide avec un jour prévu ne compte qu'une fois ce jour arrivé (ou cochée « reçue »).
+function aidArrivedSql() {
+  const cur = currentYm();
+  const today = new Date().getDate();
+  return [`(day IS NULL OR paid = 1 OR ym < ? OR (ym = ? AND day <= ?))`, [cur, cur, today]];
+}
+
 export function computeLedger(uptoYm) {
+  const [arrived, arrivedArgs] = aidArrivedSql();
   const settings = getSettings();
   const users = listUsers();
   const months = db.prepare('SELECT ym FROM months WHERE ym <= ? ORDER BY ym').all(uptoYm);
@@ -171,12 +179,12 @@ export function computeLedger(uptoYm) {
   }
   const incomeJoint = new Map(
     db
-      .prepare("SELECT ym, SUM(amount_cents) AS s FROM month_charges WHERE paid_by IS NULL AND kind = 'income' GROUP BY ym")
-      .all()
+      .prepare(`SELECT ym, SUM(amount_cents) AS s FROM month_charges WHERE paid_by IS NULL AND kind = 'income' AND ${arrived} GROUP BY ym`)
+      .all(...arrivedArgs)
       .map((r) => [r.ym, r.s])
   );
   const incomePersonal = new Map();
-  for (const r of db.prepare("SELECT ym, paid_by, SUM(amount_cents) AS s FROM month_charges WHERE paid_by IS NOT NULL AND kind = 'income' GROUP BY ym, paid_by").all()) {
+  for (const r of db.prepare(`SELECT ym, paid_by, SUM(amount_cents) AS s FROM month_charges WHERE paid_by IS NOT NULL AND kind = 'income' AND ${arrived} GROUP BY ym, paid_by`).all(...arrivedArgs)) {
     if (!incomePersonal.has(r.ym)) incomePersonal.set(r.ym, new Map());
     incomePersonal.get(r.ym).set(r.paid_by, r.s);
   }
@@ -271,6 +279,12 @@ export function getMonthSummary(ym) {
     .prepare('SELECT id, charge_id, label, amount_cents, category, day, paid, one_off, paid_by, kind FROM month_charges WHERE ym = ? ORDER BY one_off, sort, day IS NULL, day, id')
     .all(ym)
     .map((c) => ({ ...c, paid: !!c.paid, one_off: !!c.one_off }));
+  // arrived = l'aide est déjà comptée ce mois-ci (voir aidArrivedSql)
+  const [arrived, arrivedArgs] = aidArrivedSql();
+  const arrivedIds = new Set(
+    db.prepare(`SELECT id FROM month_charges WHERE ym = ? AND kind = 'income' AND ${arrived}`).all(ym, ...arrivedArgs).map((r) => r.id)
+  );
+  for (const c of summary.charges) if (c.kind === 'income') c.arrived = arrivedIds.has(c.id);
   summary.contributions = db
     .prepare('SELECT id, user_id, amount_cents, date, note, created_by, created_at, group_id FROM contributions WHERE ym = ? ORDER BY date DESC, id DESC')
     .all(ym);

@@ -116,12 +116,15 @@ function ChargesTab({ ctx, month }) {
                 <div class="title ellipsis">${c.label}</div>
                 <div class="sub">${c.paid_by ? `Reçue sur le compte de ${nameOf(c.paid_by)}` : 'Reçue sur le compte commun'}${c.day ? ` · le ${c.day}` : ''}</div>
               </div>
-              <div class="amount num" style=${{ color: 'var(--ok)' }}>+${eur(c.amount_cents)}</div>
+              <div class="member-amount num">
+                <div class="amount" style=${{ color: c.arrived ? 'var(--ok)' : 'var(--muted)' }}>+${eur(c.amount_cents)}</div>
+                ${!c.arrived && html`<div class="small muted">Prévue le ${c.day}</div>`}
+              </div>
             </li>`
           )}
         </ul>
       </section>
-      <p class="small muted center">Elle compte pour les deux : la part de chacun baisse d'autant.</p>`}
+      <p class="small muted center">Elle compte pour les deux : la part de chacun baisse d'autant, à partir du jour où elle arrive.</p>`}
 
     ${edit === 'new' &&
     html`<${ItemSheet}

@@ -54,7 +54,7 @@ function Hero({ month }) {
 
 function MemberRow({ m, user, isMe, month }) {
   const personalLabels = month.charges.filter((c) => c.paid_by === m.user_id && c.kind !== 'income').map((c) => c.label);
-  const aidLabels = month.charges.filter((c) => c.paid_by === m.user_id && c.kind === 'income').map((c) => c.label);
+  const aidLabels = month.charges.filter((c) => c.paid_by === m.user_id && c.kind === 'income' && c.arrived).map((c) => c.label);
   return html`<div class="member">
     <div class="row">
       <${Avatar} user=${user} />
