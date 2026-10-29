@@ -75,6 +75,58 @@ function AccountSheet({ accounts, space, onClose }) {
   </${Sheet}>`;
 }
 
+// Tirer vers le bas depuis le haut de la page pour recharger (le logo suit le doigt, tourne, puis rebondit).
+const PULL_MAX = 130;
+const PULL_TRIGGER = 85;
+function PullToRefresh() {
+  const [dist, setDist] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const start = useRef(null);
+  const distRef = useRef(0);
+  useEffect(() => {
+    const onStart = (e) => {
+      // Pas pendant un panneau ouvert, ni si la page n'est pas tout en haut.
+      start.current = window.scrollY <= 0 && !document.querySelector('.sheet-backdrop') ? e.touches[0].clientY : null;
+    };
+    const onMove = (e) => {
+      if (start.current == null) return;
+      const dy = e.touches[0].clientY - start.current;
+      // Résistance : plus on tire, moins ça descend.
+      distRef.current = dy > 0 ? Math.min(PULL_MAX, dy * 0.5) : 0;
+      setDist(distRef.current);
+    };
+    const onEnd = () => {
+      if (start.current == null) return;
+      start.current = null;
+      if (distRef.current >= PULL_TRIGGER) {
+        setLoading(true);
+        navigator.vibrate?.(10);
+        setTimeout(() => location.reload(), 650);
+      } else setDist(0);
+      distRef.current = 0;
+    };
+    window.addEventListener('touchstart', onStart, { passive: true });
+    window.addEventListener('touchmove', onMove, { passive: true });
+    window.addEventListener('touchend', onEnd);
+    window.addEventListener('touchcancel', onEnd);
+    return () => {
+      window.removeEventListener('touchstart', onStart);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onEnd);
+      window.removeEventListener('touchcancel', onEnd);
+    };
+  }, []);
+  const y = loading ? PULL_TRIGGER : dist;
+  const ready = dist >= PULL_TRIGGER;
+  return html`<div
+    class="ptr ${loading ? 'loading' : ''} ${ready ? 'ready' : ''} ${start.current == null ? 'settle' : ''}"
+    style=${{ transform: `translate(-50%, ${y - 60}px)`, opacity: Math.min(1, y / 50) }}
+    aria-hidden="true"
+  >
+    <img src="/icons/icon.svg" alt="" style=${{ transform: loading ? undefined : `rotate(${dist * 3}deg) scale(${0.6 + Math.min(1, dist / PULL_TRIGGER) * 0.4})` }} />
+  </div>`;
+}
+
 const spaceOf = (tab) => (tab.startsWith('perso') ? 'perso' : 'commun');
 
 // L'app se rouvre sur le dernier espace utilisé.
@@ -259,6 +311,7 @@ function App() {
         )}
       </nav>
     </div>
+    <${PullToRefresh} />
     <${Toaster} />
   `;
 }
