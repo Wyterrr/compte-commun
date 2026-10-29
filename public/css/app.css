@@ -218,7 +218,7 @@ a { color: var(--accent); }
 .tab-indicator {
   position: absolute;
   inset: 0 auto 0 0;
-  width: 25%;
+  width: calc(100% / var(--n, 4));
   pointer-events: none;
   padding: 0 4px;
   transform: translateX(calc(var(--i) * 100%));
@@ -755,3 +755,31 @@ a { color: var(--accent); }
 .mini-bar > div { height: 100%; border-radius: inherit; background: var(--grad); transition: width 1s var(--ease-out-strong); }
 .mini-bar > div.full { background: var(--ok); opacity: .6; }
 .cov-ok { color: var(--ok); font-weight: 700; }
+
+/* Compte actif + choix du compte */
+.space-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 5px 12px 5px 5px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  font: inherit;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text);
+  cursor: pointer;
+  max-width: 100%;
+  transition: transform .2s var(--ease-spring);
+}
+.space-chip:active { transform: scale(.96); }
+.space-chip .avatar.sm { width: 28px; height: 28px; border-radius: 50%; font-size: 11px; }
+.space-chip svg { color: var(--muted); flex: none; }
+.space-chip .avatars .avatar + .avatar, .account-list .avatars .avatar + .avatar { margin-left: -10px; box-shadow: 0 0 0 2px var(--card-solid); }
+.account-list .avatar { border-radius: 50%; }
+.account-list .avatars { min-width: 52px; }
+.account-list li.on .title { color: var(--accent); }

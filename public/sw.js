@@ -1,5 +1,5 @@
 // Changer la version force la mise à jour du cache de l'app chez tout le monde.
-const VERSION = 'v9';
+const VERSION = 'v10';
 const SHELL_CACHE = `cc-shell-${VERSION}`;
 const API_CACHE = 'cc-api';
 
@@ -14,6 +14,7 @@ const SHELL = [
   '/js/views/auth.js',
   '/js/views/home.js',
   '/js/views/budget.js',
+  '/js/views/perso.js',
   '/js/views/history.js',
   '/js/views/settings.js',
   '/js/views/item-sheet.js',

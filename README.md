@@ -12,6 +12,8 @@ Petite app mobile (PWA) pour gérer le compte commun du couple : on liste ce que
 - **Ce mois** : progression, reste à verser pour chacun, « J'ai fait mon virement » ou **virement à deux**. Confettis quand le mois est bouclé 🎉.
 - **Report des écarts** (optionnel) : une avance ou un manque est reporté sur le mois suivant.
 - **Budget** : le budget du mois, couvert au fur et à mesure par les virements reçus, charge par charge. On y ajoute aussi les charges exceptionnelles et les dépenses ponctuelles.
+- **Deux espaces**, comme deux comptes : un sélecteur **Commun / Perso** en haut, chaque espace avec ses onglets. L'app se rouvre sur le dernier utilisé.
+- **Perso** : l'espace privé de chacun. Solde du mois (revenus saisis à la main : salaire, virements reçus ; moins les dépenses). Chaque paiement Apple Pay arrive tout seul via une automatisation Raccourcis de l'iPhone (montant, commerçant, carte), en « À classer » ; un commerçant classé une fois l'est ensuite automatiquement. Budget mensuel par catégorie. Configuration : Perso → Réglages → Paiements Apple Pay → Connecter.
 - **Historique** : résumé, bilan de chacun depuis le début, détail de chaque mois.
 - **Notifications push** : virement de l'autre, mois bouclé, rappels automatiques, bouton « Relancer » 👋.
 - Chaque mois garde une **photo** de ses charges et de sa répartition : un changement s'applique au mois en cours et aux suivants, jamais au passé.

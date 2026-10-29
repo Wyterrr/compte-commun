@@ -3,14 +3,14 @@ import { post, del } from '../api.js';
 import { Icon, Avatar, Ring, Bar, Sheet, Segmented, MoneyInput, Money, Count, Skeleton, toast, useSubmit, useSheet, moneyOk } from '../ui.js';
 import { eur, pct, monthLabel, addMonths, parseMoney, centsToInput, defaultDateFor, shortDate } from '../util.js';
 
-export function MonthHeader({ ctx }) {
+export function MonthHeader({ ctx, title }) {
   const { ym, setYm, boot, settings } = ctx;
   return html`<header class="topbar">
     <button class="icon-btn" disabled=${ym <= settings.start_ym} onClick=${() => setYm(addMonths(ym, -1))} aria-label="Mois précédent">
       <${Icon.left} />
     </button>
     <div class="grow center">
-      <div class="eyebrow ellipsis">${settings.household_name}</div>
+      <div class="eyebrow ellipsis">${title || settings.household_name}</div>
       <h1 class="month-title" key=${ym}>${monthLabel(ym)}</h1>
       ${ym !== boot.current_ym &&
       html`<button class="link-btn" onClick=${() => setYm(boot.current_ym)}>Revenir à ${monthLabel(boot.current_ym, false)}</button>`}

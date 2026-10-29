@@ -24,6 +24,17 @@ export function formatEuros(cents) {
   return (cents / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
 }
 
+/** Montant envoyé par Raccourcis ("12,50 €", "€1,234.56", 12.5…) -> centimes ; null si illisible. */
+export function parseAmount(v) {
+  let s = String(v ?? '').replace(/[^\d.,]/g, '');
+  const sep = Math.max(s.lastIndexOf(','), s.lastIndexOf('.'));
+  // Le dernier séparateur suivi d'1 ou 2 chiffres est la virgule décimale ; les autres sont des milliers.
+  if (sep >= 0 && s.length - sep - 1 <= 2) s = s.slice(0, sep).replace(/[.,]/g, '') + '.' + s.slice(sep + 1);
+  else s = s.replace(/[.,]/g, '');
+  const n = Math.round(parseFloat(s) * 100);
+  return Number.isFinite(n) && n > 0 && n <= 100_000_000 ? n : null;
+}
+
 export function listUsers() {
   return db
     .prepare('SELECT id, name, color, income_cents, custom_pct_bp FROM users ORDER BY id')

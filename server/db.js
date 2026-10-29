@@ -100,6 +100,30 @@ CREATE TABLE IF NOT EXISTS expenses (
 );
 CREATE INDEX IF NOT EXISTS idx_expenses_ym ON expenses(ym);
 
+-- Compte perso : paiements Apple Pay reçus du raccourci iPhone (category NULL = à classer)
+-- et revenus saisis à la main (kind = 'income' : salaire, virement reçu ; merchant = libellé)
+CREATE TABLE IF NOT EXISTS personal_tx (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind         TEXT NOT NULL DEFAULT 'expense',
+  ym           TEXT NOT NULL,
+  date         TEXT NOT NULL,
+  amount_cents INTEGER NOT NULL,
+  merchant     TEXT NOT NULL DEFAULT '',
+  card         TEXT NOT NULL DEFAULT '',
+  category     TEXT,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_personal_tx_user_ym ON personal_tx(user_id, ym);
+
+-- Budget mensuel perso par catégorie (le même chaque mois)
+CREATE TABLE IF NOT EXISTS personal_budgets (
+  user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  category     TEXT NOT NULL,
+  amount_cents INTEGER NOT NULL,
+  PRIMARY KEY (user_id, category)
+);
+
 CREATE TABLE IF NOT EXISTS push_subs (
   endpoint   TEXT PRIMARY KEY,
   user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -121,6 +145,11 @@ for (const table of ['charges', 'month_charges']) {
   if (!cols.includes('paid_by')) db.exec(`ALTER TABLE ${table} ADD COLUMN paid_by INTEGER REFERENCES users(id) ON DELETE SET NULL`);
   // kind = 'charge' (dépense) ou 'income' (aide reçue, ex : CAF). Pour une aide, paid_by = qui la reçoit.
   if (!cols.includes('kind')) db.exec(`ALTER TABLE ${table} ADD COLUMN kind TEXT NOT NULL DEFAULT 'charge'`);
+}
+
+// Jeton (haché) du raccourci iPhone qui envoie les paiements Apple Pay
+if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'wallet_token_hash')) {
+  db.exec('ALTER TABLE users ADD COLUMN wallet_token_hash TEXT');
 }
 
 // Passage au thème pastel : on adoucit les couleurs vives des profils existants

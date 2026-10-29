@@ -27,6 +27,7 @@ import {
   syncChargeDeleted,
   computeLedger,
   getMonthSummary,
+  parseAmount,
 } from './logic.js';
 import { vapidPublicKey, saveSubscription, removeSubscription, sendToUser, sendToUsers } from './push.js';
 
@@ -115,6 +116,7 @@ function monthParam(req) {
   if (!isValidYm(ym) || !ensureMonth(ym)) throw new HttpError(404, 'Mois indisponible');
   return ym;
 }
+const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 function userExists(id) {
   return !!db.prepare('SELECT 1 FROM users WHERE id = ?').get(id);
 }
@@ -222,6 +224,30 @@ api.post(
     const others = listUsers().filter((u) => u.id !== userId).map((u) => u.id);
     fireAndForget(sendToUsers(others, { title: 'Compte commun', body: `${name} a rejoint le compte commun 🎉`, url: '/' }));
     res.json({ ok: true });
+  })
+);
+
+// Paiement Apple Pay envoyé par l'automatisation « Transaction » de Raccourcis (iPhone).
+// Pas de cookie ici : le raccourci s'authentifie avec le jeton perso (en-tête Authorization: Bearer …).
+api.post(
+  '/wallet/tx',
+  route((req, res) => {
+    const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+    const user = token && db.prepare('SELECT id FROM users WHERE wallet_token_hash = ?').get(sha256(token));
+    if (!user) throw new HttpError(401, 'Jeton invalide');
+    const amount = parseAmount(req.body.amount);
+    if (amount == null) throw bad('Montant invalide');
+    const merchant = String(req.body.merchant ?? '').trim().slice(0, 80);
+    const card = String(req.body.card ?? '').trim().slice(0, 60);
+    // Un commerçant déjà classé une fois est classé pareil automatiquement.
+    const known = merchant
+      ? db.prepare('SELECT category FROM personal_tx WHERE user_id = ? AND merchant = ? AND category IS NOT NULL ORDER BY id DESC LIMIT 1').get(user.id, merchant)
+      : null;
+    const date = localDate();
+    db.prepare('INSERT INTO personal_tx (user_id, ym, date, amount_cents, merchant, card, category) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+      user.id, date.slice(0, 7), date, amount, merchant, card, known?.category ?? null
+    );
+    res.json({ ok: true, category: known?.category ?? null });
   })
 );
 
@@ -629,6 +655,92 @@ api.post(
     res.json({ sent });
   })
 );
+
+// Compte perso (visible seulement par son propriétaire)
+function persoSummary(userId, ym) {
+  const cols = 'id, ym, date, amount_cents, merchant, card, category';
+  return {
+    ym,
+    transactions: db.prepare(`SELECT ${cols} FROM personal_tx WHERE user_id = ? AND ym = ? AND kind = 'expense' AND category IS NOT NULL ORDER BY date DESC, id DESC`).all(userId, ym),
+    // Les paiements à classer de tous les mois, pour ne rien oublier.
+    pending: db.prepare(`SELECT ${cols} FROM personal_tx WHERE user_id = ? AND kind = 'expense' AND category IS NULL ORDER BY date DESC, id DESC`).all(userId),
+    incomes: db.prepare(`SELECT ${cols} FROM personal_tx WHERE user_id = ? AND ym = ? AND kind = 'income' ORDER BY date DESC, id DESC`).all(userId, ym),
+    budgets: Object.fromEntries(
+      db.prepare('SELECT category, amount_cents FROM personal_budgets WHERE user_id = ?').all(userId).map((r) => [r.category, r.amount_cents])
+    ),
+    wallet_ready: !!db.prepare('SELECT wallet_token_hash FROM users WHERE id = ?').get(userId).wallet_token_hash,
+  };
+}
+function ownTx(req) {
+  const row = db.prepare('SELECT * FROM personal_tx WHERE id = ? AND user_id = ?').get(Number(req.params.id), req.user.id);
+  if (!row) throw new HttpError(404, 'Introuvable');
+  return row;
+}
+
+api.get(
+  '/perso/:ym',
+  route((req, res) => {
+    if (!isValidYm(req.params.ym)) throw new HttpError(404, 'Mois indisponible');
+    res.json(persoSummary(req.user.id, req.params.ym));
+  })
+);
+
+api.patch(
+  '/perso/tx/:id',
+  route((req, res) => {
+    const row = ownTx(req);
+    const b = req.body;
+    const date = b.date !== undefined ? dateStr(b.date) : row.date;
+    db.prepare('UPDATE personal_tx SET category = ?, merchant = ?, amount_cents = ?, date = ?, ym = ? WHERE id = ?').run(
+      b.category !== undefined ? category(b.category) : row.category,
+      b.label !== undefined ? str(b.label, { max: 80, field: 'Libellé' }) : row.merchant,
+      b.amount_cents !== undefined ? cents(b.amount_cents) : row.amount_cents,
+      date, date.slice(0, 7), row.id
+    );
+    res.json({ ok: true });
+  })
+);
+
+api.delete(
+  '/perso/tx/:id',
+  route((req, res) => {
+    db.prepare('DELETE FROM personal_tx WHERE id = ?').run(ownTx(req).id);
+    res.json({ ok: true });
+  })
+);
+
+// Revenus perso saisis à la main (salaire, virement reçu…)
+api.post(
+  '/perso/incomes',
+  route((req, res) => {
+    const date = req.body.date ? dateStr(req.body.date) : localDate();
+    db.prepare("INSERT INTO personal_tx (user_id, kind, ym, date, amount_cents, merchant) VALUES (?, 'income', ?, ?, ?, ?)").run(
+      req.user.id, date.slice(0, 7), date, cents(req.body.amount_cents), str(req.body.label, { max: 80, field: 'Libellé' })
+    );
+    res.json({ ok: true });
+  })
+);
+
+api.put(
+  '/perso/budgets',
+  route((req, res) => {
+    const cat = category(req.body.category);
+    const amount = cents(req.body.amount_cents, { allowZero: true });
+    if (amount === 0) db.prepare('DELETE FROM personal_budgets WHERE user_id = ? AND category = ?').run(req.user.id, cat);
+    else
+      db.prepare(
+        'INSERT INTO personal_budgets (user_id, category, amount_cents) VALUES (?, ?, ?) ON CONFLICT(user_id, category) DO UPDATE SET amount_cents = excluded.amount_cents'
+      ).run(req.user.id, cat, amount);
+    res.json({ ok: true });
+  })
+);
+
+// Nouveau jeton pour le raccourci iPhone : affiché une seule fois, l'ancien cesse de marcher.
+api.post('/perso/wallet-token', (req, res) => {
+  const token = crypto.randomBytes(24).toString('base64url');
+  db.prepare('UPDATE users SET wallet_token_hash = ? WHERE id = ?').run(sha256(token), req.user.id);
+  res.json({ token });
+});
 
 api.use((_req, _res, next) => next(new HttpError(404, 'Introuvable')));
 

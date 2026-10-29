@@ -1,10 +1,11 @@
 import { html, render, useState, useEffect, useCallback, useRef } from '/vendor/preact-htm.js';
 import { get, post } from './api.js';
 import { addMonths } from './util.js';
-import { Icon, Toaster, toast, celebrate } from './ui.js';
+import { Icon, Toaster, toast, celebrate, Avatar, Sheet, useSheet } from './ui.js';
 import { AuthScreen } from './views/auth.js';
 import { HomeView } from './views/home.js';
 import { BudgetView } from './views/budget.js';
+import { PersoHomeView, PersoBudgetView, PersoSettingsView } from './views/perso.js';
 import { HistoryView } from './views/history.js';
 import { SettingsView } from './views/settings.js';
 
@@ -14,17 +15,74 @@ function parseHash() {
   if (a === 'mois' && /^\d{4}-\d{2}$/.test(b || '')) return { tab: 'home', ym: b };
   if (a === 'join' && b) return { tab: 'join', code: b };
   if (a === 'budget') return { tab: 'budget' };
+  if (a === 'perso') return { tab: b === 'budget' ? 'perso-budget' : b === 'reglages' ? 'perso-settings' : 'perso-home' };
   if (a === 'historique') return { tab: 'history' };
   if (a === 'reglages') return { tab: 'settings' };
   return { tab: 'home' };
 }
 
-const TABS = [
-  ['home', '#/', 'Ce mois', Icon.home],
-  ['budget', '#/budget', 'Budget', Icon.list],
-  ['history', '#/historique', 'Historique', Icon.chart],
-  ['settings', '#/reglages', 'Réglages', Icon.gear],
-];
+// Deux espaces, comme deux comptes : le commun du couple et le perso de chacun, chacun avec ses onglets.
+const TABS = {
+  commun: [
+    ['home', '#/', 'Ce mois', Icon.home],
+    ['budget', '#/budget', 'Budget', Icon.list],
+    ['history', '#/historique', 'Historique', Icon.chart],
+    ['settings', '#/reglages', 'Réglages', Icon.gear],
+  ],
+  perso: [
+    ['perso-home', '#/perso', 'Ce mois', Icon.home],
+    ['perso-budget', '#/perso/budget', 'Budget', Icon.list],
+    ['perso-settings', '#/perso/reglages', 'Réglages', Icon.gear],
+  ],
+};
+/** Pastille du compte actif ; un appui ouvre la liste des comptes (comme Revolut). */
+function SpaceSwitch({ space, users, me, household }) {
+  const [open, setOpen] = useState(false);
+  const accounts = [
+    ['commun', household, 'Compte commun du couple', users.slice(0, 2)],
+    ['perso', 'Mon compte perso', 'Visible seulement par toi', [me]],
+  ];
+  const cur = accounts.find(([k]) => k === space);
+  return html`
+    <button type="button" class="space-chip" onClick=${() => setOpen(true)} aria-haspopup="dialog">
+      <span class="avatars">${cur[3].map((u) => html`<${Avatar} key=${u.id} user=${u} small />`)}</span>
+      <span class="ellipsis">${space === 'perso' ? 'Perso' : 'Commun'}</span>
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+    </button>
+    ${open && html`<${AccountSheet} accounts=${accounts} space=${space} onClose=${() => setOpen(false)} />`}
+  `;
+}
+
+function AccountSheet({ accounts, space, onClose }) {
+  const { closing, close } = useSheet(onClose);
+  const pick = (k) => {
+    if (k !== space) location.hash = TABS[k][0][1];
+    close();
+  };
+  return html`<${Sheet} title="Comptes" onClose=${close} closing=${closing}>
+    <ul class="list account-list">
+      ${accounts.map(
+        ([k, name, sub, people]) => html`<li key=${k} class="clickable ${k === space ? 'on' : ''}" onClick=${() => pick(k)}>
+          <span class="avatars">${people.map((u) => html`<${Avatar} key=${u.id} user=${u} />`)}</span>
+          <div class="grow">
+            <div class="title ellipsis">${name}</div>
+            <div class="sub">${sub}</div>
+          </div>
+          ${k === space && html`<span class="tick-sm">✓</span>`}
+        </li>`
+      )}
+    </ul>
+  </${Sheet}>`;
+}
+
+const spaceOf = (tab) => (tab.startsWith('perso') ? 'perso' : 'commun');
+
+// L'app se rouvre sur le dernier espace utilisé.
+try {
+  if (!location.hash.replace(/^#\/?/, '') && localStorage.getItem('cc-space') === 'perso') location.hash = '#/perso';
+} catch {
+  /* stockage indisponible : on reste sur le commun */
+}
 
 function App() {
   const [phase, setPhase] = useState('loading'); // loading | setup | login | join | ready | error
@@ -89,6 +147,11 @@ function App() {
   useEffect(() => {
     if (route.ym) changeYm(route.ym);
     window.scrollTo(0, 0);
+    try {
+      if (route.tab !== 'join') localStorage.setItem('cc-space', spaceOf(route.tab));
+    } catch {
+      /* stockage indisponible */
+    }
   }, [route]);
 
   useEffect(() => {
@@ -174,19 +237,22 @@ function App() {
     logout,
   };
 
-  const View = { home: HomeView, budget: BudgetView, history: HistoryView, settings: SettingsView }[route.tab] || HomeView;
+  const space = spaceOf(route.tab);
+  const tabs = TABS[space];
+  const View = { home: HomeView, budget: BudgetView, 'perso-home': PersoHomeView, 'perso-budget': PersoBudgetView, 'perso-settings': PersoSettingsView, history: HistoryView, settings: SettingsView }[route.tab] || HomeView;
 
   return html`
     <main class="page">
       ${!online && html`<div class="offline-banner">Hors ligne — affichage des dernières données connues</div>`}
+      <${SpaceSwitch} space=${space} users=${boot.users} me=${boot.me} household=${boot.settings.household_name} />
       <div class="view" key=${route.tab}>
         <${View} ctx=${ctx} />
       </div>
     </main>
     <div class="tabbar">
-      <nav style=${{ '--i': Math.max(0, TABS.findIndex(([k]) => k === route.tab)) }}>
+      <nav style=${{ '--i': Math.max(0, tabs.findIndex(([k]) => k === route.tab)), '--n': tabs.length }}>
         <span class="tab-indicator" aria-hidden="true"></span>
-        ${TABS.map(
+        ${tabs.map(
           ([key, href, label, I]) => html`<a href=${href} class=${route.tab === key ? 'active' : ''} aria-current=${route.tab === key ? 'page' : undefined}>
             <${I} />${label}
           </a>`
