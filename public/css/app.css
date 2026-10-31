@@ -805,3 +805,14 @@ a { color: var(--accent); }
 @keyframes ptr-spin { to { transform: rotate(360deg); } }
 @keyframes ptr-bounce { 0% { scale: .7; } 60% { scale: 1.15; } 100% { scale: 1; } }
 @media (prefers-reduced-motion: reduce) { .ptr.loading, .ptr.loading img { animation: none; } }
+
+/* Paliers « payer en priorité » du versement */
+.tiers { display: grid; gap: 6px; }
+.tier {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 14px;
+  border: 1px solid var(--line); background: var(--card);
+  font: inherit; color: var(--text); text-align: left; cursor: pointer;
+}
+.tier.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.tier-emoji { font-size: 18px; }

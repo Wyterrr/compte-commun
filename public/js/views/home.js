@@ -1,7 +1,7 @@
 import { html, useState } from '/vendor/preact-htm.js';
 import { post, del } from '../api.js';
 import { Icon, Avatar, Ring, Bar, Sheet, Segmented, MoneyInput, Money, Count, Skeleton, toast, useSubmit, useSheet, moneyOk } from '../ui.js';
-import { eur, pct, monthLabel, addMonths, parseMoney, centsToInput, defaultDateFor, shortDate } from '../util.js';
+import { eur, pct, monthLabel, addMonths, parseMoney, centsToInput, defaultDateFor, shortDate, catEmoji, CATEGORIES } from '../util.js';
 
 export function MonthHeader({ ctx, title }) {
   const { ym, setYm, boot, settings } = ctx;
@@ -97,6 +97,26 @@ function splitByShares(total, members) {
   });
 }
 
+// Priorité de paiement : l'ordre des catégories (logement, énergie, internet…), puis le jour du mois.
+const PRIORITY = new Map(CATEGORIES.map(([k], i) => [k, i]));
+
+/** Paliers « couvrir jusqu'à telle charge » : ce que la personne doit verser pour sa part de ces charges. */
+function priorityTiers(month, m) {
+  if (!m || !month.total || m.remaining <= 0) return [];
+  const charges = month.charges
+    .filter((c) => !c.paid_by && c.kind !== 'income')
+    .sort((a, b) => (PRIORITY.get(a.category) ?? 99) - (PRIORITY.get(b.category) ?? 99) || (a.day ?? 99) - (b.day ?? 99));
+  const tiers = [];
+  let cum = 0;
+  for (const c of charges) {
+    cum += c.amount_cents;
+    // Sa part de ces charges, moins ce qu'elle a déjà versé ; le dernier palier retombe sur « reste à verser ».
+    const amount = Math.min(m.remaining, Math.max(0, Math.round((m.target * cum) / month.total) - m.paid));
+    if (amount > 0 && amount < m.remaining && amount !== tiers.at(-1)?.amount) tiers.push({ charge: c, amount, first: !tiers.length });
+  }
+  return tiers;
+}
+
 function ContributionSheet({ ctx, initialUser, onClose }) {
   const { month, users, me, ym } = ctx;
   const { closing, close } = useSheet(onClose);
@@ -167,6 +187,7 @@ function ContributionSheet({ ctx, initialUser, onClose }) {
         : html`<div key="one">
             <${MoneyInput} big value=${amount} onInput=${setAmount} autofocus />
             <p class="small muted center">Montant viré sur le compte commun pour ${monthLabel(ym)}</p>
+            <${PriorityPicker} month=${month} member=${month.members.find((m) => m.user_id === who)} amount=${amount} onPick=${setAmount} />
           </div>`}
       <label class="field">
         <span>Date du virement</span>
@@ -184,6 +205,24 @@ function ContributionSheet({ ctx, initialUser, onClose }) {
       </div>
     </form>
   </${Sheet}>`;
+}
+
+function PriorityPicker({ month, member, amount, onPick }) {
+  const tiers = priorityTiers(month, member);
+  if (!tiers.length) return null;
+  const cur = parseMoney(amount);
+  const row = (key, emoji, label, cents) => html`<button type="button" key=${key} class="tier ${cur === cents ? 'on' : ''}" onClick=${() => onPick(centsToInput(cents))}>
+    <span class="tier-emoji">${emoji}</span>
+    <span class="grow ellipsis">${label}</span>
+    <strong class="num">${eur(cents)}</strong>
+  </button>`;
+  return html`<div class="field">
+    <span>Payer en priorité</span>
+    <div class="tiers">
+      ${tiers.map((t) => row(t.charge.id, catEmoji(t.charge.category), `${t.first ? 'Jusqu’à' : '+'} ${t.charge.label}`, t.amount))}
+      ${row('all', '✅', 'Tout le mois', member.remaining)}
+    </div>
+  </div>`;
 }
 
 function AccountCard({ month }) {
